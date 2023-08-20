@@ -151,75 +151,67 @@ def get_data_from_url(url, downloadpath):
     info = gr.Markdown.update(markdown2)
     return filename, image, download_btn, out_text, info
 
-def start_downloading(downloader_type, download_btn, url, downloadpath, filename, addnet, logging, new_folder, preview):
+def start_downloading(downloader_type, download_btn, url, downloadpath, filename, addnet, logging):
     complete1 = f'SUCCESS: Download Completed, Saved to\n'
     complete2 = f'ERROR: File Already Exist in\n'
     complete3 = 'ERROR: Something went wrong, please try again later'
     path, extension = get_filename_from_url(url)
     imgname = f'{filename}.preview.png'
-    if new_folder:
-       target1 = os.path.join(downloadpath, filename)
-       target2 = os.path.join(addnet_path, 'models', 'lora', filename)
+    if url.find('https://civitai.com/') != -1:
+        target1 = downloadpath  # Use the specified download path
+        target2 = os.path.join(addnet_path, 'models', 'lora', filename)
     else:
-         target1 = os.path.join(downloadpath)
-         target2 = os.path.join(addnet_path, 'models', 'lora')
+        target1 = downloadpath  # Use the specified download path
+        target2 = os.path.join(addnet_path, 'models', 'lora')
     final_target = None
     if addnet:
-       final_target = target2
+        final_target = target2
     else:
-         final_target = target1
+        final_target = target1
+
+    command = f'aria2c -c -x 16 -s 16 -k 1M --input-file model.txt -d {final_target}'
+    with open('model.txt', 'w') as w:
+        if not url.find('https://civitai.com/') != -1:
+            w.write(f'{url}\n out={filename}{extension}')
+        else:
+            imgurl = get_image_from_url(url)
+            w.write(f'{url}\n out={filename}{extension}\n{imgurl}\n out={imgname}')
+
     back(download_btn)
     if not os.path.exists(os.path.join(final_target, f'{filename}{extension}')):
-       try:
-           if downloader_type == 'aria2':
-              command = f'aria2c -c -x 16 -s 16 -k 1M --input-file model.txt -d {final_target}'
-              with open('model.txt', 'w') as w:
-                   if not url.find('https://civitai.com/')!=-1:
-                      w.write(f'{url}\n out={filename}{extension}')
-                   else:
-                        if preview:
-                           imgurl = get_image_from_url(url)
-                           w.write(f'{url}\n out={filename}{extension}\n{imgurl}\n out={imgname}')
-                        else:
-                             w.write(f'{url}\n out={filename}{extension}')
-              if logging:
-                 line = subprocess.getoutput(command)
-                 yield line
-                 print(line)
-              else:
-                   line = os.popen(command)
-                   for l in line:
-                       l = l.rstrip()
-                       yield f'{complete1}{final_target}'
-                   print(f'{complete1}{final_target}')
-           elif downloader_type == 'requests':
-                if new_folder:
-                   os.makedirs(final_target, exist_ok=True)
+        try:
+            if downloader_type == 'aria2':
+                if logging:
+                    line = subprocess.getoutput(command)
+                    yield line
+                    print(line)
                 else:
-                     pass
+                    line = os.popen(command)
+                    for l in line:
+                        l = l.rstrip()
+                        yield f'{complete1}{final_target}'
+                    print(f'{complete1}{final_target}')
+            elif downloader_type == 'requests':
                 download = requests.get(url, allow_redirects=True)
-                if not url.find('https://civitai.com/')!=-1:
-                   with open(os.path.join(final_target, f'{filename}{extension}'), 'wb') as f:
+                if not url.find('https://civitai.com/') != -1:
+                    with open(os.path.join(final_target, f'{filename}{extension}'), 'wb') as f:
                         f.write(download.content)
                 else:
-                     if preview:
-                        imgurl = get_image_from_url(url)
-                        img_download = requests.get(str(imgurl), allow_redirects=True)
-                        with open(os.path.join(final_target, f'{filename}{extension}'), 'wb') as f:
-                             f.write(download.content)
-                        with open(os.path.join(final_target, imgname), 'wb') as img:
-                             img.write(img_download.content)
-                     else:
-                          with open(os.path.join(final_target, f'{filename}{extension}'), 'wb') as f:
-                               f.write(download.content)
+                    os.makedirs(final_target, exist_ok=True)  # Create directory if it doesn't exist
+                    imgurl = get_image_from_url(url)
+                    with open(os.path.join(final_target, f'{filename}{extension}'), 'wb') as f:
+                        f.write(download.content)
+                    img_download = requests.get(str(imgurl), allow_redirects=True)
+                    with open(os.path.join(final_target, imgname), 'wb') as img:
+                        img.write(img_download.content)
                 yield f'{complete1}{final_target}'
                 print(f'{complete1}{final_target}')
-       except Exception as e:
-               yield f'{e}\n{complete3}'
-               print(f'{e}\n{complete3}')
+        except Exception as e:
+            yield f'{str(e)}\n{complete3}'
+            print(f'{str(e)}\n{complete3}')
     else:
-         yield f'{complete2}{final_target}'
-         print(f'{complete2}{final_target}')
+        yield f'{complete2}{final_target}'
+        print(f'{complete2}{final_target}')
 
 def back(download_btn):
     return gr.Button.update(visible=True, variant='secondary')
